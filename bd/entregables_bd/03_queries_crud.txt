@@ -1,0 +1,240 @@
+QUERIES CRUD - CLONE TWITTER/X
+
+Base de dados:
+USE clone_twitter_x;
+
+============================================================
+CREATE / INSERT
+============================================================
+
+-- Inserir utilizadores
+INSERT INTO utilizador (nome_utilizador, email, password_hash, nome, biografia, is_admin)
+VALUES ('admin', 'admin@twitterclone.pt', '$2y$10$hashdeexemploadmin1234567890', 'Administrador', 'Conta de administracao', TRUE);
+
+INSERT INTO utilizador (nome_utilizador, email, password_hash, nome, biografia)
+VALUES ('ana_silva', 'ana@exemplo.pt', '$2y$10$hashdeexemploana123456789000', 'Ana Silva', 'Estudante de TPSI');
+
+INSERT INTO utilizador (nome_utilizador, email, password_hash, nome, biografia)
+VALUES ('bruno_dev', 'bruno@exemplo.pt', '$2y$10$hashdeexemplobruno123456789', 'Bruno Costa', 'Gosto de programacao');
+
+INSERT INTO utilizador (nome_utilizador, email, password_hash, nome, biografia)
+VALUES ('carla_design', 'carla@exemplo.pt', '$2y$10$hashdeexemplocarla123456789', 'Carla Mendes', 'Design e tecnologia');
+
+INSERT INTO utilizador (nome_utilizador, email, password_hash, nome, biografia)
+VALUES ('diogo_web', 'diogo@exemplo.pt', '$2y$10$hashdeexemplodiogo123456789', 'Diogo Martins', 'Front-end e bases de dados');
+
+-- Inserir tweets
+INSERT INTO tweet (utilizador_id, conteudo)
+VALUES (2, 'Primeiro tweet no clone do Twitter/X.');
+
+INSERT INTO tweet (utilizador_id, conteudo)
+VALUES (3, 'Hoje estou a trabalhar no projeto de SGBDI.');
+
+INSERT INTO tweet (utilizador_id, conteudo)
+VALUES (4, 'A interface de uma aplicacao tambem precisa de uma boa base de dados.');
+
+INSERT INTO tweet (utilizador_id, conteudo)
+VALUES (5, 'Feed cronologico inverso implementado com ORDER BY criado_em DESC.');
+
+INSERT INTO tweet (utilizador_id, conteudo)
+VALUES (2, 'Este tweet tem uma imagem associada.');
+
+-- Inserir imagem de tweet
+INSERT INTO imagem_tweet (tweet_id, url_imagem, texto_alt)
+VALUES (5, 'https://exemplo.pt/imagens/projeto-bd.png', 'Imagem sobre o projeto de base de dados');
+
+-- Inserir seguimentos
+INSERT INTO seguimento (seguidor_id, seguido_id)
+VALUES (2, 3);
+
+INSERT INTO seguimento (seguidor_id, seguido_id)
+VALUES (2, 4);
+
+INSERT INTO seguimento (seguidor_id, seguido_id)
+VALUES (3, 2);
+
+INSERT INTO seguimento (seguidor_id, seguido_id)
+VALUES (4, 2);
+
+INSERT INTO seguimento (seguidor_id, seguido_id)
+VALUES (5, 2);
+
+INSERT INTO seguimento (seguidor_id, seguido_id)
+VALUES (5, 3);
+
+-- Inserir gostos
+INSERT INTO gosto (utilizador_id, tweet_id)
+VALUES (2, 2);
+
+INSERT INTO gosto (utilizador_id, tweet_id)
+VALUES (2, 3);
+
+INSERT INTO gosto (utilizador_id, tweet_id)
+VALUES (3, 1);
+
+INSERT INTO gosto (utilizador_id, tweet_id)
+VALUES (4, 1);
+
+INSERT INTO gosto (utilizador_id, tweet_id)
+VALUES (5, 1);
+
+INSERT INTO gosto (utilizador_id, tweet_id)
+VALUES (5, 2);
+
+============================================================
+READ / SELECT
+============================================================
+
+-- 1. Listar todos os utilizadores ativos.
+SELECT utilizador_id, nome_utilizador, email, nome, criado_em
+FROM utilizador
+WHERE ativo = TRUE
+ORDER BY criado_em DESC;
+
+-- 2. Consultar dados de login por nome de utilizador.
+SELECT utilizador_id, nome_utilizador, password_hash, ativo
+FROM utilizador
+WHERE nome_utilizador = 'ana_silva';
+
+-- 3. Listar tweets ativos com o nome do autor.
+SELECT t.tweet_id, u.nome_utilizador, t.conteudo, t.criado_em
+FROM tweet t
+INNER JOIN utilizador u ON u.utilizador_id = t.utilizador_id
+WHERE t.ativo = TRUE
+ORDER BY t.criado_em DESC;
+
+-- 4. Mostrar feed de um utilizador com tweets de quem ele segue.
+SELECT t.tweet_id, u.nome_utilizador, t.conteudo, t.criado_em
+FROM seguimento s
+INNER JOIN tweet t ON t.utilizador_id = s.seguido_id
+INNER JOIN utilizador u ON u.utilizador_id = t.utilizador_id
+WHERE s.seguidor_id = 2
+  AND t.ativo = TRUE
+  AND u.ativo = TRUE
+ORDER BY t.criado_em DESC;
+
+-- 5. Contar gostos por tweet.
+SELECT t.tweet_id, t.conteudo, COUNT(g.utilizador_id) AS total_gostos
+FROM tweet t
+LEFT JOIN gosto g ON g.tweet_id = t.tweet_id
+GROUP BY t.tweet_id, t.conteudo
+ORDER BY total_gostos DESC;
+
+-- 6. Listar seguidores de um utilizador.
+SELECT u.utilizador_id, u.nome_utilizador, u.nome, s.criado_em AS segue_desde
+FROM seguimento s
+INNER JOIN utilizador u ON u.utilizador_id = s.seguidor_id
+WHERE s.seguido_id = 2
+ORDER BY s.criado_em DESC;
+
+-- 7. Listar tweets com imagem.
+SELECT t.tweet_id, u.nome_utilizador, t.conteudo, i.url_imagem, i.texto_alt
+FROM tweet t
+INNER JOIN utilizador u ON u.utilizador_id = t.utilizador_id
+INNER JOIN imagem_tweet i ON i.tweet_id = t.tweet_id
+WHERE t.ativo = TRUE
+ORDER BY t.criado_em DESC;
+
+============================================================
+UPDATE
+============================================================
+
+-- 1. Atualizar nome e biografia de um utilizador.
+UPDATE utilizador
+SET nome = 'Ana Sofia Silva',
+    biografia = 'Estudante de TPSI e bases de dados'
+WHERE utilizador_id = 2;
+
+-- 2. Alterar email de um utilizador.
+UPDATE utilizador
+SET email = 'ana.silva@exemplo.pt'
+WHERE utilizador_id = 2;
+
+-- 3. Atualizar password hash depois de uma alteracao de password.
+UPDATE utilizador
+SET password_hash = '$2y$10$novohashdeexemploana123456789'
+WHERE utilizador_id = 2;
+
+-- 4. Desativar utilizador pelo backoffice.
+UPDATE utilizador
+SET ativo = FALSE
+WHERE utilizador_id = 5;
+
+-- 5. Reativar utilizador pelo backoffice.
+UPDATE utilizador
+SET ativo = TRUE
+WHERE utilizador_id = 5;
+
+-- 6. Editar conteudo de um tweet.
+UPDATE tweet
+SET conteudo = 'Tweet editado no clone do Twitter/X.'
+WHERE tweet_id = 1
+  AND utilizador_id = 2;
+
+-- 7. Desativar tweet pelo backoffice.
+UPDATE tweet
+SET ativo = FALSE
+WHERE tweet_id = 3;
+
+============================================================
+DELETE
+============================================================
+
+-- 1. Remover um gosto de um tweet.
+DELETE FROM gosto
+WHERE utilizador_id = 2
+  AND tweet_id = 3;
+
+-- 2. Remover um seguimento.
+DELETE FROM seguimento
+WHERE seguidor_id = 2
+  AND seguido_id = 4;
+
+-- 3. Apagar imagem associada a um tweet.
+DELETE FROM imagem_tweet
+WHERE tweet_id = 5;
+
+-- 4. Apagar um tweet especifico do proprio autor.
+DELETE FROM tweet
+WHERE tweet_id = 1
+  AND utilizador_id = 2;
+
+-- 5. Apagar todos os gostos de um tweet antes de remover dados manualmente.
+DELETE FROM gosto
+WHERE tweet_id = 2;
+
+-- 6. Apagar todos os seguimentos de um utilizador.
+DELETE FROM seguimento
+WHERE seguidor_id = 5
+   OR seguido_id = 5;
+
+-- 7. Apagar um utilizador pelo backoffice.
+DELETE FROM utilizador
+WHERE utilizador_id = 5;
+
+============================================================
+QUERIES EXTRA IMPORTANTES
+============================================================
+
+-- Registo de novo utilizador.
+INSERT INTO utilizador (nome_utilizador, email, password_hash, nome)
+VALUES ('novo_user', 'novo@exemplo.pt', '$2y$10$hashsegurodeexemplo123456789', 'Novo Utilizador');
+
+-- Publicar tweet com imagem numa transacao.
+START TRANSACTION;
+
+INSERT INTO tweet (utilizador_id, conteudo)
+VALUES (2, 'Novo tweet com imagem.');
+
+INSERT INTO imagem_tweet (tweet_id, url_imagem, texto_alt)
+VALUES (LAST_INSERT_ID(), 'https://exemplo.pt/imagens/nova-imagem.png', 'Nova imagem publicada');
+
+COMMIT;
+
+-- Dar gosto a um tweet.
+INSERT INTO gosto (utilizador_id, tweet_id)
+VALUES (3, 4);
+
+-- Seguir outro utilizador.
+INSERT INTO seguimento (seguidor_id, seguido_id)
+VALUES (3, 4);
