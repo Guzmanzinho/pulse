@@ -6,50 +6,12 @@ var logger = require('morgan');
 
 
 const sequelize = require('./config/database');
-const {Utilizador, Tweet, Comentario} = require('./models');
+const {Utilizador, Tweet, Comentario, ImagemTweet, Gosto, Seguimento } = require('./models');
 
-/*
-Utilizador.findAll().then(utilizadores => {
-  console.log('Utilizadores encontrados: ', utilizadores.length);
-})
-  .catch((erro) => {
-    console.error('Erro ao buscar utilizadores: ', erro);
-  })
-
-Tweet.findAll().then(tweets => {
-  console.log('Tweets encontrados: ', tweets.length);
-})
-  .catch((erro) => {
-    console.error('Erro ao buscar tweets: ', erro);
-  })
-
-Tweet.findAll({ include: Utilizador })
-  .then(tweets => {
-  console.log('Tweets com utilizador: ', tweets.length);
-  })
-  .catch((erro) => {~
-    console.error('Erro ao buscar tweets com utilizdor: ', erro);
-  });
-
-*/
-Comentario.findAll({ include: [Utilizador, Tweet] })
-  .then(comentarios => {
-    console.log('Comentários encontrados: ', comentarios.length);
-  })
-  .catch((erro) => {
-    console.error('Erro ao buscar comentários: ', erro);
-  });
-
-sequelize.authenticate()
-  .then(() => {
-    console.log('Ligação à bd realizada com sucesso')
-  })
-  .catch((erro) => {
-    console.error('Erro ao ligar à bd', erro);
-  })
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
+const authRoutes = require('./routes/authRoutes');
 
 var app = express();
 
@@ -65,6 +27,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter);
 app.use('/users', usersRouter);
+
+app.use('/api/auth', authRoutes);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
