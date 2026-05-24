@@ -5,6 +5,7 @@ var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 const swaggerUI = require('swagger-ui-express');
 const swaggerDocument = require('./swagger_output.json');
+const cors = require('cors');
 
 
 const sequelize = require('./config/database');
@@ -23,6 +24,10 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
 
 app.use(logger('dev'));
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
