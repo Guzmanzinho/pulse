@@ -6,9 +6,11 @@ var logger = require('morgan');
 const swaggerUI = require('swagger-ui-express');
 const swaggerDocument = require('./swagger_output.json');
 const cors = require('cors');
+const fs = require('fs');
 
 
 const sequelize = require('./config/database');
+const uploadsDir = path.join(__dirname, 'uploads');
 
 
 var indexRouter = require('./routes/index');
@@ -32,6 +34,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Ensure the uploads directory exists
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
