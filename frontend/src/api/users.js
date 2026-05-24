@@ -43,7 +43,13 @@ async function fetchAllUsersSafe() {
 /* ---- FOLLOW ---- */
 
 export async function follow({ followingId }) {
-  await apiFetch(`/api/utilizadores/${followingId}/seguir`, { method: 'POST' });
+  try {
+    await apiFetch(`/api/utilizadores/${followingId}/seguir`, { method: 'POST' });
+  } catch (e) {
+    // 409 = "Já segues este utilizador" → idempotente, tratamos como sucesso
+    // e sincronizamos o cache local (estávamos out-of-sync com o servidor).
+    if (e.status !== 409) throw e;
+  }
   const s = readFollowing();
   s.add(String(followingId));
   writeFollowing(s);
@@ -51,7 +57,12 @@ export async function follow({ followingId }) {
 }
 
 export async function unfollow({ followingId }) {
-  await apiFetch(`/api/utilizadores/${followingId}/unfollow`, { method: 'DELETE' });
+  try {
+    await apiFetch(`/api/utilizadores/${followingId}/unfollow`, { method: 'DELETE' });
+  } catch (e) {
+    // 404 = "Não segues este utilizador" → idempotente
+    if (e.status !== 404) throw e;
+  }
   const s = readFollowing();
   s.delete(String(followingId));
   writeFollowing(s);

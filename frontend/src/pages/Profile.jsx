@@ -14,6 +14,7 @@ import { listByUser } from '../api/tweets.js';
 import { updateMe } from '../api/auth.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useToast } from '../contexts/ToastContext.jsx';
+import { useTweetStore, useTweetList } from '../contexts/TweetStoreContext.jsx';
 import { formatDate } from '../utils/time.js';
 
 export function Profile() {
@@ -22,8 +23,10 @@ export function Profile() {
   const toast = useToast();
   const target = username || me?.username;
 
+  const { upsertMany } = useTweetStore();
   const [profile, setProfile] = useState(null);
-  const [tweets, setTweets] = useState([]);
+  const [tweetIds, setTweetIds] = useState([]);
+  const tweets = useTweetList(tweetIds);
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [following, setFollowing] = useState(false);
   const [status, setStatus] = useState('loading');
@@ -40,12 +43,13 @@ export function Profile() {
       setCounts(getFollowCounts(u.id));
       setFollowing(new Set(getFollowingIds(me.id)).has(u.id));
       const list = await listByUser(u.id, me.id);
-      setTweets(list);
+      upsertMany(list, 'tweets');
+      setTweetIds(list.map((t) => t.id));
       setStatus('success');
     } catch (e) {
       setError(e.message); setStatus('error');
     }
-  }, [target, me]);
+  }, [target, me, upsertMany]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -56,10 +60,6 @@ export function Profile() {
     : tab === 'likes'
       ? tweets.filter((t) => t.likedByMe)
       : tweets;
-
-  function onTweetChange(updated) {
-    setTweets((ts) => ts.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
-  }
 
   if (status === 'loading') {
     return (
@@ -162,7 +162,7 @@ export function Profile() {
           description={isMe ? 'Partilha algo novo a partir do feed.' : ' '}
         />
       ) : (
-        displayed.map((t) => <TweetCard key={t.id} tweet={t} onChange={onTweetChange} />)
+        displayed.map((t) => <TweetCard key={t.id} tweet={t} />)
       )}
 
       {editing && (

@@ -41,6 +41,11 @@ export function adaptTweet(t, viewerId) {
       };
   const image = t.ImagemTweet?.url_imagem || null;
   const likes = Array.isArray(t.Gostos) ? t.Gostos : [];
+  const rawComments = Array.isArray(t.Comentarios) ? t.Comentarios : [];
+  const commentList = rawComments
+    .map(adaptComment)
+    .filter(Boolean)
+    .sort((a, b) => a.createdAt - b.createdAt);
   return {
     id: t.tweet_id,
     authorId: t.utilizador_id,
@@ -52,7 +57,23 @@ export function adaptTweet(t, viewerId) {
     likedByMe: viewerId != null
       ? likes.some((l) => Number(l.utilizador_id) === Number(viewerId))
       : false,
-    comments: Array.isArray(t.Comentarios) ? t.Comentarios.length : 0,
+    comments: commentList.length,
+    commentList,
+  };
+}
+
+/** Converte um comentário do backend ao shape consumido pela UI. */
+export function adaptComment(c) {
+  if (!c) return null;
+  const u = c.Utilizador || null;
+  return {
+    id: c.comentario_id,
+    text: c.conteudo || '',
+    authorId: c.utilizador_id,
+    authorName: u?.nome || u?.nome_utilizador || 'Utilizador',
+    authorUsername: u?.nome_utilizador || '',
+    avatarColor: colorFor(c.utilizador_id),
+    createdAt: c.criado_em ? new Date(c.criado_em).getTime() : Date.now(),
   };
 }
 
@@ -135,12 +156,23 @@ export async function deleteTweet(tweetId) {
 }
 
 export async function likeTweet({ tweetId }) {
-  await apiFetch(`/api/tweets/${tweetId}/gosto`, { method: 'POST' });
+  try {
+    await apiFetch(`/api/tweets/${tweetId}/gosto`, { method: 'POST' });
+  } catch (e) {
+    // 409 = "Já deste like" → idempotente. O estado óptimista do frontend
+    // estava correcto; o servidor já tinha o like persistido.
+    if (e.status !== 409) throw e;
+  }
   return { id: tweetId, likedByMe: true };
 }
 
 export async function unlikeTweet({ tweetId }) {
-  await apiFetch(`/api/tweets/${tweetId}/gosto`, { method: 'DELETE' });
+  try {
+    await apiFetch(`/api/tweets/${tweetId}/gosto`, { method: 'DELETE' });
+  } catch (e) {
+    // 404 = "Like não encontrado para remoção" → idempotente
+    if (e.status !== 404) throw e;
+  }
   return { id: tweetId, likedByMe: false };
 }
 

@@ -7,10 +7,13 @@ import { SkeletonTweet, EmptyState, ErrorState } from '../components/States.jsx'
 import { Button } from '../components/Button.jsx';
 import { listFeed } from '../api/tweets.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { useTweetStore, useTweetList } from '../contexts/TweetStoreContext.jsx';
 
 export function Feed() {
   const { user } = useAuth();
-  const [tweets, setTweets] = useState([]);
+  const { upsertMany } = useTweetStore();
+  const [tweetIds, setTweetIds] = useState([]);
+  const tweets = useTweetList(tweetIds);
   const [status, setStatus] = useState('loading'); // loading | success | empty | error
   const [error, setError] = useState(null);
   const [mode, setMode] = useState('following'); // following | all
@@ -19,22 +22,22 @@ export function Feed() {
     setStatus('loading'); setError(null);
     try {
       const data = await listFeed({ viewerId: user.id, mode: m });
-      setTweets(data);
+      // /api/tweets traz includes completos; /api/utilizadores/feed só traz o básico.
+      upsertMany(data, m === 'all' ? 'tweets' : 'feed');
+      setTweetIds(data.map((t) => t.id));
       setStatus(data.length === 0 ? 'empty' : 'success');
     } catch (e) {
       setError(e.message);
       setStatus('error');
     }
-  }, [user, mode]);
+  }, [user, mode, upsertMany]);
 
   useEffect(() => { load(mode); }, [load, mode]);
 
   function handleCreated(tweet) {
-    setTweets((ts) => [tweet, ...ts]);
+    upsertMany([tweet], 'local');
+    setTweetIds((ids) => [tweet.id, ...ids]);
     setStatus('success');
-  }
-  function handleChange(updated) {
-    setTweets((ts) => ts.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
   }
 
   return (
@@ -75,7 +78,7 @@ export function Feed() {
         />
       )}
       {status === 'success' && tweets.map((t) => (
-        <TweetCard key={t.id} tweet={t} onChange={handleChange} />
+        <TweetCard key={t.id} tweet={t} />
       ))}
     </AppShell>
   );
