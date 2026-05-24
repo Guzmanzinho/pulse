@@ -3,15 +3,18 @@ var express = require('express');
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
+const swaggerUI = require('swagger-ui-express');
+const swaggerDocument = require('./swagger_output.json');
 
 
 const sequelize = require('./config/database');
-const {Utilizador, Tweet, Comentario, ImagemTweet, Gosto, Seguimento } = require('./models');
 
 
 var indexRouter = require('./routes/index');
-var usersRouter = require('./routes/users');
+const usersRoutes = require('./routes/usersRoutes');
 const authRoutes = require('./routes/authRoutes');
+const tweetRoutes = require('./routes/tweetRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 var app = express();
 
@@ -25,10 +28,15 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 app.use('/', indexRouter);
-app.use('/users', usersRouter);
 
 app.use('/api/auth', authRoutes);
+app.use('/api/tweets', tweetRoutes);
+app.use('/api/utilizadores', usersRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(swaggerDocument));
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

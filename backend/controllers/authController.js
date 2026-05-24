@@ -1,5 +1,7 @@
 const { Utilizador } = require('../models');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
 
 // SignUp 
 async function signUp(req, res) {
@@ -46,6 +48,65 @@ async function signUp(req, res) {
     }
 }
 
+// Login 
+async function login(req, res) {
+    const { nome_utilizador, password } = req.body;
+    if (!nome_utilizador || !password) {
+        return res.status(400).json({ mensagem: 'Nome de utilizador e password são obrigatórios' });
+    }
+
+    const utilizador = await Utilizador.findOne({
+        where: { nome_utilizador: nome_utilizador } 
+    });
+    if (utilizador) {
+        var passwordMatch = await bcrypt.compare(password, utilizador.password_hash);
+        if (passwordMatch) {
+
+            // Gerar token JWT
+            const token = jwt.sign(
+                {
+                    utilizador_id: utilizador.utilizador_id,
+                    nome_utilizador: utilizador.nome_utilizador,
+                    is_admin: utilizador.is_admin
+                },
+                process.env.JWT_SECRET,
+                { expiresIn: '1h' }
+                );
+
+                return res.status(200).json({
+                mensagem: 'Login bem-sucedido',
+                token,
+                utilizador: {
+                    utilizador_id: utilizador.utilizador_id,
+                    nome_utilizador: utilizador.nome_utilizador,
+                    email: utilizador.email,
+                    nome: utilizador.nome,
+                    is_admin: utilizador.is_admin,
+                    ativo: utilizador.ativo
+                }
+                });
+
+        } else {
+            return res.status(401).json({ mensagem: 'Credenciais inválidas' });
+        }
+
+    } else {
+        return res.status(404).json({ mensagem: 'Utilizador não encontrado' });
+    }
+}
+
+// Logout
+async function logout(req, res) {
+    try{
+        return res.status(200).json({ mensagem: 'Logout bem-sucedido' });
+    }catch(error){
+        console.error('Erro ao fazer logout:', error);
+        return res.status(500).json({ mensagem: 'Erro ao fazer logout' });
+    }
+}
+
 module.exports = {
-    signUp
+    signUp,
+    login,
+    logout
 }

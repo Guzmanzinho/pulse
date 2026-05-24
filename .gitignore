@@ -8,6 +8,11 @@ node_modules/
 **/.env
 **/.env.*
 
+# Certificates / keys
+*.pem
+*.key
+*.crt
+
 # Build output
 dist/
 build/
