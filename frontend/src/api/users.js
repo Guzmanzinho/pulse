@@ -1,129 +1,148 @@
-import { getDb, setDb } from './db.js';
-import { request, ApiError } from './client.js';
+/* users.js — Servicio de utilizadores / seguimentos / admin.
+ *
+ *  Endpoints reales:
+ *    POST   /api/utilizadores/:utilizador_id/seguir
+ *    DELETE /api/utilizadores/:utilizador_id/unfollow
+ *    GET    /api/admin/utilizadores            (apenas admin)
+ *    PUT    /api/admin/utilizadores/:id
+ *    DELETE /api/admin/utilizadores/:id
+ *
+ *  Limitações conhecidas do backend (sem endpoint público):
+ *    - listagem de utilizadores → tentamos via /api/admin/utilizadores; se 403, [].
+ *    - getUserByUsername → resolvido client-side a partir da listagem (se disponível).
+ *    - contagens de seguidores/seguindo de outros → não há endpoint; devolvemos 0.
+ *    - lista de pessoas que “eu” sigo → cache local em localStorage (sincronizada
+ *      apenas pelas chamadas follow/unfollow desta sessão).
+ */
 
-function strip(u) {
-  if (!u) return null;
-  const { password, ...rest } = u;
-  return rest;
+import { apiFetch, ApiError } from './client.js';
+import { adaptUser, getStoredUser } from './auth.js';
+
+const FOLLOWING_KEY = 'pulse.following.v1';
+
+function readFollowing() {
+  try {
+    const raw = localStorage.getItem(FOLLOWING_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch { return new Set(); }
+}
+function writeFollowing(set) {
+  try { localStorage.setItem(FOLLOWING_KEY, JSON.stringify([...set])); } catch {}
 }
 
-export function listUsers({ q = '', course = '', excludeId = null } = {}) {
-  return request(() => {
-    const db = getDb();
-    let users = db.users.map(strip);
-    if (excludeId) users = users.filter((u) => u.id !== excludeId);
-    if (q) {
-      const needle = q.toLowerCase();
-      users = users.filter((u) =>
-        u.name.toLowerCase().includes(needle) ||
-        u.username.toLowerCase().includes(needle) ||
-        (u.course || '').toLowerCase().includes(needle)
-      );
-    }
-    if (course && course !== 'Todos') {
-      users = users.filter((u) => u.course === course);
-    }
-    return users;
+async function fetchAllUsersSafe() {
+  try {
+    const data = await apiFetch('/api/admin/utilizadores');
+    return Array.isArray(data) ? data.map(adaptUser).filter(Boolean) : [];
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) return [];
+    throw e;
+  }
+}
+
+/* ---- FOLLOW ---- */
+
+export async function follow({ followingId }) {
+  await apiFetch(`/api/utilizadores/${followingId}/seguir`, { method: 'POST' });
+  const s = readFollowing();
+  s.add(String(followingId));
+  writeFollowing(s);
+  return true;
+}
+
+export async function unfollow({ followingId }) {
+  await apiFetch(`/api/utilizadores/${followingId}/unfollow`, { method: 'DELETE' });
+  const s = readFollowing();
+  s.delete(String(followingId));
+  writeFollowing(s);
+  return true;
+}
+
+export function isFollowing(_followerId, followingId) {
+  return readFollowing().has(String(followingId));
+}
+
+/** Apenas correto para o utilizador autenticado (cache local). */
+export function getFollowingIds(_userId) {
+  return [...readFollowing()].map((id) => {
+    const n = Number(id);
+    return Number.isFinite(n) ? n : id;
   });
 }
 
-export function getUserByUsername(username) {
-  return request(() => {
-    const u = getDb().users.find((x) => x.username.toLowerCase() === username.toLowerCase());
-    if (!u) throw new ApiError('Utilizador não encontrado.', 404);
-    return strip(u);
-  });
+/** Backend não expõe contagens — devolvemos 0/0 para não rebentar a UI. */
+export function getFollowCounts(_userId) {
+  return { followers: 0, following: 0 };
 }
 
-export function getCourses() {
-  return request(() => {
-    const set = new Set(getDb().users.map((u) => u.course).filter(Boolean));
-    return ['Todos', ...Array.from(set)];
-  });
+/* ---- LISTAGENS ---- */
+
+export async function listUsers({ q = '', course = '', excludeId = null } = {}) {
+  let users = await fetchAllUsersSafe();
+  if (excludeId != null) users = users.filter((u) => Number(u.id) !== Number(excludeId));
+  if (q) {
+    const needle = q.toLowerCase();
+    users = users.filter((u) =>
+      (u.name || '').toLowerCase().includes(needle) ||
+      (u.username || '').toLowerCase().includes(needle)
+    );
+  }
+  // O backend não tem campo "curso"; filtro mantém-se inerte excepto "Todos".
+  if (course && course !== 'Todos') users = [];
+  return users;
 }
 
-export function follow({ followerId, followingId }) {
-  return request(() => {
-    if (followerId === followingId) throw new ApiError('Não te podes seguir a ti próprio.');
-    setDb((d) => {
-      if (d.follows.some((f) => f.followerId === followerId && f.followingId === followingId)) return d;
-      return { ...d, follows: [...d.follows, { followerId, followingId }] };
-    });
-    return true;
-  });
+export async function getUserByUsername(username) {
+  // Primeiro: se for o próprio utilizador autenticado, devolvemo-lo do cache.
+  const me = getStoredUser();
+  if (me && me.username && me.username.toLowerCase() === username.toLowerCase()) return me;
+
+  const users = await fetchAllUsersSafe();
+  const u = users.find((x) => (x.username || '').toLowerCase() === username.toLowerCase());
+  if (!u) throw new ApiError('Utilizador não encontrado.', 404);
+  return u;
 }
 
-export function unfollow({ followerId, followingId }) {
-  return request(() => {
-    setDb((d) => ({
-      ...d,
-      follows: d.follows.filter((f) => !(f.followerId === followerId && f.followingId === followingId)),
-    }));
-    return true;
-  });
+export async function getCourses() {
+  // Sem campo "curso" no backend.
+  return ['Todos'];
 }
 
-export function isFollowing(followerId, followingId) {
-  return getDb().follows.some((f) => f.followerId === followerId && f.followingId === followingId);
-}
-
-export function getFollowCounts(userId) {
-  const db = getDb();
-  return {
-    followers: db.follows.filter((f) => f.followingId === userId).length,
-    following: db.follows.filter((f) => f.followerId === userId).length,
-  };
-}
-
-export function getFollowingIds(userId) {
-  return getDb().follows.filter((f) => f.followerId === userId).map((f) => f.followingId);
-}
-
-export function suggestionsFor(userId, limit = 4) {
-  return request(() => {
-    const db = getDb();
-    const following = new Set(getFollowingIds(userId));
-    return db.users
-      .filter((u) => u.id !== userId && !following.has(u.id))
-      .slice(0, limit)
-      .map(strip);
-  });
+export async function suggestionsFor(userId, limit = 4) {
+  const users = await fetchAllUsersSafe();
+  if (!users.length) return [];
+  const following = readFollowing();
+  return users
+    .filter((u) => Number(u.id) !== Number(userId) && !following.has(String(u.id)))
+    .slice(0, limit);
 }
 
 /* ---- ADMIN ---- */
-export function adminListUsers({ q = '' } = {}) {
-  return request(() => {
-    const db = getDb();
-    let users = db.users.map(strip);
-    if (q) {
-      const needle = q.toLowerCase();
-      users = users.filter((u) =>
-        u.name.toLowerCase().includes(needle) ||
-        u.username.toLowerCase().includes(needle) ||
-        u.email.toLowerCase().includes(needle)
-      );
-    }
-    return users;
-  });
+
+export async function adminListUsers({ q = '' } = {}) {
+  const users = await fetchAllUsersSafe();
+  if (!q) return users;
+  const needle = q.toLowerCase();
+  return users.filter((u) =>
+    (u.name || '').toLowerCase().includes(needle) ||
+    (u.username || '').toLowerCase().includes(needle) ||
+    (u.email || '').toLowerCase().includes(needle)
+  );
 }
-export function adminUpdateUser(id, patch) {
-  return request(() => {
-    setDb((d) => ({
-      ...d,
-      users: d.users.map((u) => (u.id === id ? { ...u, ...patch } : u)),
-    }));
-    return strip(getDb().users.find((u) => u.id === id));
-  });
+
+export async function adminUpdateUser(id, patch) {
+  const body = {};
+  if (patch.name !== undefined) body.nome = patch.name;
+  if (patch.username !== undefined) body.nome_utilizador = patch.username;
+  if (patch.email !== undefined) body.email = patch.email;
+  if (patch.role !== undefined) body.is_admin = patch.role === 'admin';
+  if (patch.bio !== undefined) body.biografia = patch.bio;
+  if (patch.ativo !== undefined) body.ativo = patch.ativo;
+  await apiFetch(`/api/admin/utilizadores/${id}`, { method: 'PUT', body });
+  return { id, ...patch };
 }
-export function adminDeleteUser(id) {
-  return request(() => {
-    setDb((d) => ({
-      ...d,
-      users: d.users.filter((u) => u.id !== id),
-      tweets: d.tweets.filter((t) => t.authorId !== id),
-      follows: d.follows.filter((f) => f.followerId !== id && f.followingId !== id),
-      likes: d.likes.filter((l) => l.userId !== id),
-    }));
-    return true;
-  });
+
+export async function adminDeleteUser(id) {
+  await apiFetch(`/api/admin/utilizadores/${id}`, { method: 'DELETE' });
+  return true;
 }

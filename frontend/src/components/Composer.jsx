@@ -13,7 +13,8 @@ export function Composer({ onCreated, autoFocus = false }) {
   const { user } = useAuth();
   const toast = useToast();
   const [text, setText] = useState('');
-  const [image, setImage] = useState(null);
+  const [image, setImage] = useState(null);    // File | null
+  const [preview, setPreview] = useState(null); // string (dataURL) | null
   const [posting, setPosting] = useState(false);
   const fileRef = useRef(null);
   const taRef = useRef(null);
@@ -44,8 +45,9 @@ export function Composer({ onCreated, autoFocus = false }) {
       toast.error('A imagem é muito grande (máx 4 MB).');
       return;
     }
+    setImage(f);
     const reader = new FileReader();
-    reader.onload = (ev) => setImage(ev.target.result);
+    reader.onload = (ev) => setPreview(ev.target.result);
     reader.readAsDataURL(f);
     e.target.value = '';
   }
@@ -62,9 +64,10 @@ export function Composer({ onCreated, autoFocus = false }) {
     }
     setPosting(true);
     try {
-      const tweet = await createTweet({ authorId: user.id, text, image });
+      const tweet = await createTweet({ text, image });
       setText('');
       setImage(null);
+      setPreview(null);
       toast.success('Publicação criada com sucesso.');
       onCreated?.(tweet);
     } catch (err) {
@@ -89,13 +92,13 @@ export function Composer({ onCreated, autoFocus = false }) {
           onChange={(e) => setText(e.target.value)}
           aria-label="Compositor de publicação"
         />
-        {image && (
+        {preview && (
           <div className="composer__preview">
-            <img src={image} alt="Pré-visualização" />
+            <img src={preview} alt="Pré-visualização" />
             <button
               type="button"
               className="composer__preview-remove"
-              onClick={() => setImage(null)}
+              onClick={() => { setImage(null); setPreview(null); }}
               aria-label="Remover imagem"
             >
               <PIcon name="close" size={16} />

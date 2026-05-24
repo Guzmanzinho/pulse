@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Avatar } from './Avatar.jsx';
 import { PIcon } from './PIcon.jsx';
 import { likeTweet, unlikeTweet } from '../api/tweets.js';
+import { resolveMedia } from '../api/client.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { formatRelative } from '../utils/time.js';
@@ -60,9 +61,9 @@ export function TweetCard({ tweet, onChange, onMenu }) {
     }
     try {
       const updated = next
-        ? await likeTweet({ userId: user.id, tweetId: tweet.id })
-        : await unlikeTweet({ userId: user.id, tweetId: tweet.id });
-      onChange?.(updated);
+        ? await likeTweet({ tweetId: tweet.id })
+        : await unlikeTweet({ tweetId: tweet.id });
+      onChange?.({ ...tweet, ...updated, likes: count + (next ? 1 : -1) });
     } catch (err) {
       setLiked(!next);
       setCount((c) => c - (next ? 1 : -1));
@@ -95,13 +96,13 @@ export function TweetCard({ tweet, onChange, onMenu }) {
         {tweet.text && <p className="tweet__text">{tweet.text}</p>}
         {tweet.image && (
           <div className="tweet__image">
-            <img src={tweet.image} alt="" loading="lazy" />
+            <img src={resolveMedia(tweet.image)} alt="" loading="lazy" />
           </div>
         )}
         <div className="tweet__actions">
           <button className="tweet__action" aria-label="Comentar">
             <PIcon name="comment" size={18} />
-            <span>0</span>
+            <span>{tweet.comments ?? 0}</span>
           </button>
           <button className="tweet__action" aria-label="Repostar">
             <PIcon name="repost" size={18} />

@@ -1,86 +1,142 @@
-import { getDb, setDb } from './db.js';
-import { request, ApiError } from './client.js';
+/* auth.js — Servicio de autenticação contra /api/auth/*.
+ *
+ *  El backend devuelve campos em portugués (utilizador_id, nome_utilizador,
+ *  nome, email, is_admin, ativo). Esta capa adapta esos campos al shape que
+ *  consome o resto del frontend ({ id, username, name, email, role,
+ *  avatarColor, verified, … }).
+ */
 
-const SESSION_KEY = 'pulse.session.v1';
+import { apiFetch, setToken, getToken, ApiError } from './client.js';
 
-function publicUser(u) {
-  if (!u) return null;
-  const { password, ...rest } = u;
-  return rest;
+const USER_KEY = 'pulse.user';
+const FOLLOWING_KEY = 'pulse.following.v1';
+
+function colorFor(id) {
+  const n = Number(id);
+  if (!Number.isFinite(n)) return 0;
+  return Math.abs(n) % 9;
 }
 
-export function getSession() {
+/** Convierte un utilizador del backend al shape esperado por la UI. */
+export function adaptUser(u) {
+  if (!u) return null;
+  return {
+    id: u.utilizador_id,
+    username: u.nome_utilizador,
+    name: u.nome ?? u.nome_utilizador ?? '',
+    email: u.email ?? '',
+    role: u.is_admin ? 'admin' : 'user',
+    bio: u.biografia || '',
+    course: '',
+    avatarColor: colorFor(u.utilizador_id),
+    joinedAt: u.criado_em || null,
+    verified: !!u.is_admin,
+    ativo: u.ativo !== false,
+    fotoPerfil: u.foto_perfil || null,
+  };
+}
+
+function saveUser(u) {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
+    if (u) localStorage.setItem(USER_KEY, JSON.stringify(u));
+    else localStorage.removeItem(USER_KEY);
+  } catch {}
+}
+
+export function getStoredUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
 }
-function setSession(s) {
-  if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
-  else localStorage.removeItem(SESSION_KEY);
+
+function clearLocalState() {
+  setToken(null);
+  saveUser(null);
+  try { localStorage.removeItem(FOLLOWING_KEY); } catch {}
 }
 
-export function login({ username, password }) {
-  return request(() => {
-    if (!username || !password) throw new ApiError('Preenche o utilizador e a password.');
-    const db = getDb();
-    const user = db.users.find(
-      (u) => u.username.toLowerCase() === username.trim().toLowerCase() && u.password === password
-    );
-    if (!user) throw new ApiError('Credenciais inválidas. Verifica o utilizador e a password.');
-    setSession({ userId: user.id });
-    return publicUser(user);
+export async function login({ username, password }) {
+  if (!username || !password) {
+    throw new ApiError('Preenche o utilizador e a password.', 400);
+  }
+  const data = await apiFetch('/api/auth/login', {
+    method: 'POST',
+    auth: false,
+    body: { nome_utilizador: username.trim(), password },
   });
+  setToken(data.token);
+  const u = adaptUser(data.utilizador);
+  saveUser(u);
+  return u;
 }
 
-export function register({ username, name, email, password }) {
-  return request(() => {
-    if (!username || !name || !email || !password) {
-      throw new ApiError('Preenche todos os campos.');
-    }
-    if (password.length < 6) {
-      throw new ApiError('A password tem de ter pelo menos 6 caracteres.');
-    }
-    const db = getDb();
-    if (db.users.some((u) => u.username.toLowerCase() === username.toLowerCase())) {
-      throw new ApiError('Este nome de utilizador já está em uso.');
-    }
-    if (db.users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-      throw new ApiError('Já existe uma conta com este email.');
-    }
-    const id = `u-${Date.now().toString(36)}`;
-    const newUser = {
-      id, username: username.trim(), name: name.trim(), email: email.trim(),
-      password, role: 'user', bio: '', course: '',
-      avatarColor: Math.floor(Math.random() * 9),
-      joinedAt: new Date().toISOString(), verified: false,
-    };
-    setDb((d) => ({ ...d, users: [...d.users, newUser] }));
-    setSession({ userId: id });
-    return publicUser(newUser);
+export async function register({ username, name, email, password }) {
+  if (!username || !name || !email || !password) {
+    throw new ApiError('Preenche todos os campos.', 400);
+  }
+  if (password.length < 6) {
+    throw new ApiError('A password tem de ter pelo menos 6 caracteres.', 400);
+  }
+  await apiFetch('/api/auth/signup', {
+    method: 'POST',
+    auth: false,
+    body: {
+      nome_utilizador: username.trim(),
+      nome: name.trim(),
+      email: email.trim(),
+      password,
+    },
   });
+  // O backend não devolve token no signup — fazemos login imediato.
+  return login({ username: username.trim(), password });
 }
 
-export function logout() {
-  setSession(null);
-  return Promise.resolve(true);
+export async function logout() {
+  try { await apiFetch('/api/auth/logout', { method: 'POST' }); } catch {}
+  clearLocalState();
+  return true;
 }
 
-export function getCurrentUser() {
-  const s = getSession();
-  if (!s) return null;
-  const u = getDb().users.find((x) => x.id === s.userId);
-  return publicUser(u);
+/** Valida o token chamando /api/auth/perfil. Devolve user em cache se válido. */
+export async function getCurrentUser() {
+  if (!getToken()) return null;
+  try {
+    const data = await apiFetch('/api/auth/perfil');
+    const stored = getStoredUser();
+    const jwtId = data?.user?.utilizador_id;
+    if (stored && Number(stored.id) === Number(jwtId)) return stored;
+    // Sem dados em cache: construímos um user mínimo a partir do JWT.
+    const minimal = adaptUser(data?.user);
+    if (minimal) saveUser(minimal);
+    return minimal;
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) clearLocalState();
+    return null;
+  }
 }
 
-export function updateMe(patch) {
-  return request(() => {
-    const s = getSession();
-    if (!s) throw new ApiError('Não autenticado.', 401);
-    setDb((d) => ({
-      ...d,
-      users: d.users.map((u) => (u.id === s.userId ? { ...u, ...patch } : u)),
-    }));
-    return publicUser(getDb().users.find((u) => u.id === s.userId));
-  });
+/** Edição de perfil. Backend só permite via endpoint admin → falha graciosa para users normais. */
+export async function updateMe(patch) {
+  const me = getStoredUser();
+  if (!me) throw new ApiError('Não autenticado.', 401);
+
+  const body = {};
+  if (patch.name !== undefined) body.nome = patch.name;
+  if (patch.email !== undefined) body.email = patch.email;
+  if (patch.bio !== undefined) body.biografia = patch.bio;
+
+  if (!Object.keys(body).length) return me;
+
+  try {
+    await apiFetch(`/api/admin/utilizadores/${me.id}`, { method: 'PUT', body });
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) {
+      throw new ApiError('A edição de perfil está limitada a administradores nesta versão.', 403);
+    }
+    throw e;
+  }
+  const next = { ...me, ...patch };
+  saveUser(next);
+  return next;
 }

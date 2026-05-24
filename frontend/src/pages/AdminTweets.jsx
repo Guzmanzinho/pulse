@@ -7,6 +7,7 @@ import { Input, TextArea } from '../components/Input.jsx';
 import { Modal, ConfirmDeleteModal } from '../components/Modal.jsx';
 import { SkeletonTweet, ErrorState, EmptyState } from '../components/States.jsx';
 import { adminListTweets, adminUpdateTweet, adminDeleteTweet } from '../api/tweets.js';
+import { resolveMedia } from '../api/client.js';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { formatRelative, formatDateTime } from '../utils/time.js';
 
@@ -125,7 +126,7 @@ export function AdminTweets() {
                       <td style={{ maxWidth: 340 }}>
                         <div className="data-table__user">
                           {t.image
-                            ? <img src={t.image} alt="" style={{ width: 38, height: 30, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                            ? <img src={resolveMedia(t.image)} alt="" style={{ width: 38, height: 30, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
                             : <div style={{ width: 38, height: 30, borderRadius: 6, background: 'var(--bg-subtle)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <PIcon name="comment" size={16} color="var(--text-mute)" />
                               </div>
@@ -238,7 +239,7 @@ function EditTweetModal({ tweet, working, onClose, onSave }) {
         </small>
         {tweet.image && (
           <div style={{ marginTop: 8 }}>
-            <img src={tweet.image} alt="" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--border)' }} />
+            <img src={resolveMedia(tweet.image)} alt="" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--border)' }} />
           </div>
         )}
       </div>

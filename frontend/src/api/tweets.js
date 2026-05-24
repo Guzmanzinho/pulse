@@ -1,128 +1,182 @@
-import { getDb, setDb } from './db.js';
-import { request, ApiError } from './client.js';
-import { getFollowingIds } from './users.js';
+/* tweets.js — Servicio de tweets / gostos / comentários contra /api/tweets/*.
+ *
+ *  Endpoints reales del backend:
+ *    GET    /api/tweets                       (público, lista geral)
+ *    POST   /api/tweets/criar                 (multipart: conteudo + imagem File)
+ *    PUT    /api/tweets/:tweet_id             (edição do próprio)
+ *    DELETE /api/tweets/:tweet_id
+ *    POST   /api/tweets/:tweet_id/comentar
+ *    POST   /api/tweets/:tweet_id/gosto       (singular!)
+ *    DELETE /api/tweets/:tweet_id/gosto
+ *    GET    /api/utilizadores/feed            (feed do utilizador autenticado)
+ *
+ *  Para admin:
+ *    GET    /api/admin/tweets
+ *    PUT    /api/admin/tweets/:tweet_id
+ *    DELETE /api/admin/tweets/:tweet_id
+ */
 
-const MAX_LEN = 280;
+import { apiFetch, ApiError } from './client.js';
+import { adaptUser, getStoredUser } from './auth.js';
 
-function strip(u) {
-  if (!u) return null;
-  const { password, ...rest } = u;
-  return rest;
+const MAX = 280;
+
+function colorFor(id) {
+  const n = Number(id);
+  if (!Number.isFinite(n)) return 0;
+  return Math.abs(n) % 9;
 }
 
-function hydrate(tweet, viewerId) {
-  const db = getDb();
-  const author = db.users.find((u) => u.id === tweet.authorId);
-  const likes = db.likes.filter((l) => l.tweetId === tweet.id);
+/** Converte um tweet vindo do backend (com includes) ao shape esperado pela UI. */
+export function adaptTweet(t, viewerId) {
+  if (!t) return null;
+  const author = t.Utilizador
+    ? adaptUser(t.Utilizador)
+    : {
+        id: t.utilizador_id,
+        username: '',
+        name: 'Utilizador',
+        avatarColor: colorFor(t.utilizador_id),
+        verified: false,
+      };
+  const image = t.ImagemTweet?.url_imagem || null;
+  const likes = Array.isArray(t.Gostos) ? t.Gostos : [];
   return {
-    ...tweet,
-    author: strip(author),
+    id: t.tweet_id,
+    authorId: t.utilizador_id,
+    author,
+    text: t.conteudo || '',
+    image,
+    createdAt: t.criado_em ? new Date(t.criado_em).getTime() : Date.now(),
     likes: likes.length,
-    likedByMe: viewerId ? likes.some((l) => l.userId === viewerId) : false,
+    likedByMe: viewerId != null
+      ? likes.some((l) => Number(l.utilizador_id) === Number(viewerId))
+      : false,
+    comments: Array.isArray(t.Comentarios) ? t.Comentarios.length : 0,
   };
 }
 
-export function listFeed({ viewerId, mode = 'following' }) {
-  return request(() => {
-    if (!viewerId) throw new ApiError('Não autenticado.', 401);
-    const db = getDb();
-    const followingIds = getFollowingIds(viewerId);
-    const allowedAuthorIds = mode === 'all'
-      ? db.users.map((u) => u.id)
-      : [...followingIds, viewerId];
-    const tweets = db.tweets
-      .filter((t) => allowedAuthorIds.includes(t.authorId))
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .map((t) => hydrate(t, viewerId));
-    return tweets;
-  });
-}
-
-export function listByUser(userId, viewerId) {
-  return request(() => {
-    const db = getDb();
-    return db.tweets
-      .filter((t) => t.authorId === userId)
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .map((t) => hydrate(t, viewerId));
-  });
-}
-
-export function createTweet({ authorId, text, image }) {
-  return request(() => {
-    if (!authorId) throw new ApiError('Não autenticado.', 401);
-    const clean = (text || '').trim();
-    if (!clean && !image) throw new ApiError('Escreve algo ou adiciona uma imagem.');
-    if (clean.length > MAX_LEN) throw new ApiError(`Limite de ${MAX_LEN} caracteres excedido.`);
-    const tweet = {
-      id: `t-${Date.now().toString(36)}`,
-      authorId,
-      text: clean,
-      image: image || null,
-      createdAt: Date.now(),
-    };
-    setDb((d) => ({ ...d, tweets: [tweet, ...d.tweets] }));
-    return hydrate(tweet, authorId);
-  });
-}
-
-export function likeTweet({ userId, tweetId }) {
-  return request(() => {
-    setDb((d) => {
-      if (d.likes.some((l) => l.userId === userId && l.tweetId === tweetId)) return d;
-      return { ...d, likes: [...d.likes, { userId, tweetId }] };
+export async function listFeed({ viewerId, mode = 'following' } = {}) {
+  if (mode === 'following') {
+    const data = await apiFetch('/api/utilizadores/feed');
+    const list = Array.isArray(data?.feed) ? data.feed : [];
+    // O /feed não traz includes (autor, imagens, gostos). Hidratamos o autor a partir
+    // do user em cache quando é o próprio; nos restantes ficam com placeholders.
+    const me = getStoredUser();
+    return list.map((t) => {
+      const base = adaptTweet(t, viewerId);
+      if (Number(t.utilizador_id) === Number(me?.id)) {
+        base.author = {
+          id: me.id, username: me.username, name: me.name,
+          avatarColor: me.avatarColor, verified: me.verified,
+        };
+      }
+      return base;
     });
-    return hydrate(getDb().tweets.find((t) => t.id === tweetId), userId);
-  });
+  }
+  // mode === 'all' → GET /api/tweets (público, com includes)
+  const data = await apiFetch('/api/tweets', { auth: false });
+  const list = Array.isArray(data) ? data : [];
+  return list.map((t) => adaptTweet(t, viewerId));
 }
 
-export function unlikeTweet({ userId, tweetId }) {
-  return request(() => {
-    setDb((d) => ({
-      ...d,
-      likes: d.likes.filter((l) => !(l.userId === userId && l.tweetId === tweetId)),
-    }));
-    return hydrate(getDb().tweets.find((t) => t.id === tweetId), userId);
+export async function listByUser(userId, viewerId) {
+  // Não existe endpoint dedicado — usamos /api/tweets e filtramos client-side.
+  const data = await apiFetch('/api/tweets', { auth: false });
+  const list = Array.isArray(data) ? data : [];
+  return list
+    .filter((t) => Number(t.utilizador_id) === Number(userId))
+    .map((t) => adaptTweet(t, viewerId));
+}
+
+export async function createTweet({ text, image } = {}) {
+  const clean = (text || '').trim();
+  if (!clean) throw new ApiError('Escreve algo para publicar.', 400);
+  if (clean.length > MAX) throw new ApiError(`Limite de ${MAX} caracteres excedido.`, 400);
+
+  const fd = new FormData();
+  fd.append('conteudo', clean);
+  if (image instanceof File) fd.append('imagem', image);
+
+  const res = await apiFetch('/api/tweets/criar', { method: 'POST', body: fd });
+  const created = res?.tweet || {};
+  const me = getStoredUser();
+
+  // O endpoint de criação não devolve a URL da imagem; usamos uma preview local optimista.
+  const optimisticImage = image instanceof File ? URL.createObjectURL(image) : null;
+
+  return {
+    id: created.tweet_id,
+    authorId: created.utilizador_id,
+    author: me ? {
+      id: me.id, username: me.username, name: me.name,
+      avatarColor: me.avatarColor, verified: me.verified,
+    } : null,
+    text: created.conteudo || clean,
+    image: optimisticImage,
+    createdAt: created.criado_em ? new Date(created.criado_em).getTime() : Date.now(),
+    likes: 0,
+    likedByMe: false,
+    comments: 0,
+  };
+}
+
+export async function editTweet(tweetId, { text }) {
+  const res = await apiFetch(`/api/tweets/${tweetId}`, {
+    method: 'PUT',
+    body: { conteudo: text },
   });
+  return res?.tweet || { tweet_id: tweetId, conteudo: text };
+}
+
+export async function deleteTweet(tweetId) {
+  await apiFetch(`/api/tweets/${tweetId}`, { method: 'DELETE' });
+  return true;
+}
+
+export async function likeTweet({ tweetId }) {
+  await apiFetch(`/api/tweets/${tweetId}/gosto`, { method: 'POST' });
+  return { id: tweetId, likedByMe: true };
+}
+
+export async function unlikeTweet({ tweetId }) {
+  await apiFetch(`/api/tweets/${tweetId}/gosto`, { method: 'DELETE' });
+  return { id: tweetId, likedByMe: false };
+}
+
+export async function comentar({ tweetId, conteudo }) {
+  const res = await apiFetch(`/api/tweets/${tweetId}/comentar`, {
+    method: 'POST',
+    body: { conteudo },
+  });
+  return res?.comentario || null;
 }
 
 /* ---- ADMIN ---- */
-export function adminListTweets({ q = '' } = {}) {
-  return request(() => {
-    const db = getDb();
-    let tweets = db.tweets
-      .map((t) => hydrate(t, null))
-      .sort((a, b) => b.createdAt - a.createdAt);
-    if (q) {
-      const needle = q.toLowerCase();
-      tweets = tweets.filter((t) =>
-        t.text.toLowerCase().includes(needle) ||
-        t.author.name.toLowerCase().includes(needle) ||
-        t.author.username.toLowerCase().includes(needle)
-      );
-    }
-    return tweets;
-  });
+export async function adminListTweets({ q = '' } = {}) {
+  const data = await apiFetch('/api/admin/tweets');
+  const list = Array.isArray(data) ? data : [];
+  let tweets = list.map((t) => adaptTweet(t, null));
+  if (q) {
+    const needle = q.toLowerCase();
+    tweets = tweets.filter((t) =>
+      (t.text || '').toLowerCase().includes(needle) ||
+      (t.author?.name || '').toLowerCase().includes(needle) ||
+      (t.author?.username || '').toLowerCase().includes(needle)
+    );
+  }
+  return tweets;
 }
-export function adminUpdateTweet(id, patch) {
-  return request(() => {
-    if (patch.text && patch.text.length > MAX_LEN) {
-      throw new ApiError(`Limite de ${MAX_LEN} caracteres excedido.`);
-    }
-    setDb((d) => ({
-      ...d,
-      tweets: d.tweets.map((t) => (t.id === id ? { ...t, ...patch } : t)),
-    }));
-    return hydrate(getDb().tweets.find((t) => t.id === id), null);
-  });
+
+export async function adminUpdateTweet(id, patch) {
+  const body = {};
+  if (patch.text !== undefined) body.conteudo = patch.text;
+  if (patch.ativo !== undefined) body.ativo = patch.ativo;
+  const res = await apiFetch(`/api/admin/tweets/${id}`, { method: 'PUT', body });
+  return res?.tweet || { id, ...patch };
 }
-export function adminDeleteTweet(id) {
-  return request(() => {
-    setDb((d) => ({
-      ...d,
-      tweets: d.tweets.filter((t) => t.id !== id),
-      likes: d.likes.filter((l) => l.tweetId !== id),
-    }));
-    return true;
-  });
+
+export async function adminDeleteTweet(id) {
+  await apiFetch(`/api/admin/tweets/${id}`, { method: 'DELETE' });
+  return true;
 }

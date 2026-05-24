@@ -4,12 +4,24 @@ import * as authApi from '../api/auth.js';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => authApi.getCurrentUser());
-  const [bootstrapping, setBootstrapping] = useState(false);
+  // Estado optimista: usamos o user em cache (localStorage) para evitar flicker de auth.
+  const [user, setUser] = useState(() => authApi.getStoredUser());
+  const [bootstrapping, setBootstrapping] = useState(true);
 
+  // Bootstrap em background: valida o token contra /api/auth/perfil e ajusta o estado.
   useEffect(() => {
-    // Refresh user from db on mount (db may have updated bio etc.)
-    setUser(authApi.getCurrentUser());
+    let alive = true;
+    (async () => {
+      try {
+        const u = await authApi.getCurrentUser();
+        if (alive) setUser(u);
+      } catch {
+        if (alive) setUser(null);
+      } finally {
+        if (alive) setBootstrapping(false);
+      }
+    })();
+    return () => { alive = false; };
   }, []);
 
   const login = useCallback(async (credentials) => {
@@ -29,8 +41,10 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
-  const refresh = useCallback(() => {
-    setUser(authApi.getCurrentUser());
+  const refresh = useCallback(async () => {
+    const u = await authApi.getCurrentUser();
+    setUser(u);
+    return u;
   }, []);
 
   const value = useMemo(() => ({

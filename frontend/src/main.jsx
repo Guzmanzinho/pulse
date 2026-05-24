@@ -5,11 +5,8 @@ import App from './App.jsx';
 import { ThemeProvider } from './contexts/ThemeContext.jsx';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import { ToastProvider } from './contexts/ToastContext.jsx';
-import { seedIfEmpty } from './api/db.js';
 import './styles/globals.css';
 import './styles/components.css';
-
-seedIfEmpty();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
