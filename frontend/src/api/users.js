@@ -30,7 +30,8 @@ function writeFollowing(set) {
   try { localStorage.setItem(FOLLOWING_KEY, JSON.stringify([...set])); } catch {}
 }
 
-async function fetchAllUsersSafe() {
+/** Lista de utilizadores via endpoint admin (apenas funciona para admins). */
+async function fetchAdminUsersSafe() {
   try {
     const data = await apiFetch('/api/admin/utilizadores');
     return Array.isArray(data) ? data.map(adaptUser).filter(Boolean) : [];
@@ -38,6 +39,53 @@ async function fetchAllUsersSafe() {
     if (e.status === 401 || e.status === 403) return [];
     throw e;
   }
+}
+
+/** Deriva uma lista de utilizadores a partir dos autores de tweets e
+ *  comentários expostos publicamente em /api/tweets. É o único fallback
+ *  possível sem tocar no backend: o backend não tem listagem pública.
+ *  Limitação: só inclui pessoas que já publicaram ou comentaram algo.
+ */
+async function fetchUsersFromTweetsSafe() {
+  try {
+    const tweets = await apiFetch('/api/tweets', { auth: false });
+    if (!Array.isArray(tweets)) return [];
+    const byId = new Map();
+    const visit = (raw, id) => {
+      if (id == null) return;
+      const key = String(id);
+      if (byId.has(key)) return;
+      const u = adaptUser({
+        utilizador_id: id,
+        nome_utilizador: raw?.nome_utilizador,
+        nome: raw?.nome,
+        foto_perfil: raw?.foto_perfil,
+      });
+      if (u) byId.set(key, u);
+    };
+    for (const t of tweets) {
+      visit(t.Utilizador, t.Utilizador?.utilizador_id ?? t.utilizador_id);
+      if (Array.isArray(t.Comentarios)) {
+        for (const c of t.Comentarios) {
+          visit(c.Utilizador, c.utilizador_id);
+        }
+      }
+    }
+    return [...byId.values()];
+  } catch {
+    return [];
+  }
+}
+
+/** Combina admin (se disponível) + utilizadores derivados de tweets. */
+async function fetchAllUsersSafe() {
+  const admin = await fetchAdminUsersSafe();
+  if (admin.length > 0) {
+    // Admin já devolve a lista completa; nem vale a pena chamar /api/tweets.
+    return admin;
+  }
+  // Não-admin: caímos para a derivação a partir dos tweets.
+  return await fetchUsersFromTweetsSafe();
 }
 
 /* ---- FOLLOW ---- */
