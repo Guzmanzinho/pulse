@@ -1,15 +1,20 @@
 import { useState } from 'react';
-import { follow, unfollow } from '../api/users.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { useFollow } from '../contexts/FollowContext.jsx';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { useNavigate } from 'react-router-dom';
 
-export function FollowButton({ targetUserId, initialFollowing = false, onChange }) {
+/** O estado "estou a seguir?" vive no FollowContext, por isso os props
+ *  `initialFollowing` e `onChange` deixam de ser necessários. Mantemos-os
+ *  como no-ops opcionais para retro-compatibilidade com callers antigos. */
+export function FollowButton({ targetUserId, onChange }) {
   const { user } = useAuth();
+  const { isFollowing, follow, unfollow } = useFollow();
   const toast = useToast();
   const navigate = useNavigate();
-  const [following, setFollowing] = useState(initialFollowing);
   const [pending, setPending] = useState(false);
+
+  const following = isFollowing(targetUserId);
 
   async function toggle() {
     if (!user) {
@@ -17,22 +22,21 @@ export function FollowButton({ targetUserId, initialFollowing = false, onChange 
       navigate('/login');
       return;
     }
-    if (pending || user.id === targetUserId) return;
+    if (pending || Number(user.id) === Number(targetUserId)) return;
     setPending(true);
     const next = !following;
-    setFollowing(next);
     try {
-      await (next ? follow : unfollow)({ followerId: user.id, followingId: targetUserId });
+      if (next) await follow(targetUserId);
+      else await unfollow(targetUserId);
       onChange?.(next);
     } catch (err) {
-      setFollowing(!next);
       toast.error(err.message);
     } finally {
       setPending(false);
     }
   }
 
-  if (user && user.id === targetUserId) {
+  if (user && Number(user.id) === Number(targetUserId)) {
     return null;
   }
 

@@ -5,18 +5,19 @@ import { Avatar } from '../components/Avatar.jsx';
 import { PIcon } from '../components/PIcon.jsx';
 import { FollowButton } from '../components/FollowButton.jsx';
 import { SkeletonTweet, EmptyState, ErrorState } from '../components/States.jsx';
-import { listUsers, getCourses, getFollowCounts, getFollowingIds } from '../api/users.js';
+import { listUsers, getCourses, getFollowCounts } from '../api/users.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { useFollow } from '../contexts/FollowContext.jsx';
 
 export function Discover() {
   const { user } = useAuth();
+  const { isFollowing } = useFollow();
   const [users, setUsers] = useState([]);
   const [courses, setCourses] = useState(['Todos']);
   const [course, setCourse] = useState('Todos');
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState(null);
-  const [followingIds, setFollowingIds] = useState(() => new Set());
 
   useEffect(() => {
     getCourses().then(setCourses).catch(() => {});
@@ -28,7 +29,6 @@ export function Discover() {
       const data = await listUsers({ q, course, excludeId: user.id });
       setUsers(data);
       setStatus(data.length === 0 ? 'empty' : 'success');
-      setFollowingIds(new Set(getFollowingIds(user.id)));
     } catch (e) {
       setError(e.message); setStatus('error');
     }
@@ -38,17 +38,13 @@ export function Discover() {
 
   const counts = useMemo(() => {
     const m = {};
-    users.forEach((u) => { m[u.id] = getFollowCounts(u.id); });
-    return m;
-  }, [users]);
-
-  function onFollowChange(targetId, isFollowing) {
-    setFollowingIds((prev) => {
-      const next = new Set(prev);
-      if (isFollowing) next.add(targetId); else next.delete(targetId);
-      return next;
+    users.forEach((u) => {
+      // Contadores honestos: só sabemos "+1 seguidor" se nós próprios seguimos esta pessoa.
+      const base = getFollowCounts(u.id);
+      m[u.id] = { ...base, followers: isFollowing(u.id) ? 1 : 0 };
     });
-  }
+    return m;
+  }, [users, isFollowing]);
 
   return (
     <AppShell
@@ -108,11 +104,7 @@ export function Discover() {
                     </div>
                   )}
                 </div>
-                <FollowButton
-                  targetUserId={u.id}
-                  initialFollowing={followingIds.has(u.id)}
-                  onChange={(f) => onFollowChange(u.id, f)}
-                />
+                <FollowButton targetUserId={u.id} />
               </div>
               {u.bio && <p className="user-card__bio">{u.bio}</p>}
               <div className="user-card__stats">

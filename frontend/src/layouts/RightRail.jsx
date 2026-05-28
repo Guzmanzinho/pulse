@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { PIcon } from '../components/PIcon.jsx';
 import { Avatar } from '../components/Avatar.jsx';
 import { FollowButton } from '../components/FollowButton.jsx';
-import { suggestionsFor, getFollowingIds } from '../api/users.js';
+import { suggestionsFor } from '../api/users.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
 const TRENDS = [
@@ -17,12 +17,10 @@ export function RightRail() {
   const { user } = useAuth();
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [followingIds, setFollowingIds] = useState(new Set());
 
   useEffect(() => {
     let alive = true;
     if (!user) return;
-    setFollowingIds(new Set(getFollowingIds(user.id)));
     suggestionsFor(user.id, 4)
       .then((data) => { if (alive) { setSuggestions(data); setLoading(false); } })
       .catch(() => { if (alive) setLoading(false); });
@@ -60,10 +58,7 @@ export function RightRail() {
               <div className="user-card-row__handle">@{u.username}</div>
               {u.course && <div className="user-card-row__dept">{u.course}</div>}
             </div>
-            <FollowButton
-              targetUserId={u.id}
-              initialFollowing={followingIds.has(u.id)}
-            />
+            <FollowButton targetUserId={u.id} />
           </div>
         ))}
         <Link to="/utilizadores" className="rail__cta" style={{ background: 'transparent', textDecoration: 'none' }}>

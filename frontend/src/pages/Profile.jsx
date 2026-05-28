@@ -9,12 +9,13 @@ import { TweetCard } from '../components/TweetCard.jsx';
 import { Modal } from '../components/Modal.jsx';
 import { Input, TextArea } from '../components/Input.jsx';
 import { SkeletonTweet, EmptyState, ErrorState } from '../components/States.jsx';
-import { getUserByUsername, getFollowCounts, getFollowingIds } from '../api/users.js';
+import { getUserByUsername } from '../api/users.js';
 import { listByUser } from '../api/tweets.js';
 import { updateMe } from '../api/auth.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { useTweetStore, useTweetList } from '../contexts/TweetStoreContext.jsx';
+import { useFollow } from '../contexts/FollowContext.jsx';
 import { formatDate } from '../utils/time.js';
 
 export function Profile() {
@@ -24,11 +25,10 @@ export function Profile() {
   const target = username || me?.username;
 
   const { upsertMany } = useTweetStore();
+  const { followingCount, isFollowing } = useFollow();
   const [profile, setProfile] = useState(null);
   const [tweetIds, setTweetIds] = useState([]);
   const tweets = useTweetList(tweetIds);
-  const [counts, setCounts] = useState({ followers: 0, following: 0 });
-  const [following, setFollowing] = useState(false);
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('posts'); // posts | likes | images
@@ -40,8 +40,6 @@ export function Profile() {
     try {
       const u = await getUserByUsername(target);
       setProfile(u);
-      setCounts(getFollowCounts(u.id));
-      setFollowing(new Set(getFollowingIds(me.id)).has(u.id));
       const list = await listByUser(u.id, me.id);
       upsertMany(list, 'tweets');
       setTweetIds(list.map((t) => t.id));
@@ -53,7 +51,16 @@ export function Profile() {
 
   useEffect(() => { load(); }, [load]);
 
-  const isMe = me && profile && me.id === profile.id;
+  const isMe = me && profile && Number(me.id) === Number(profile.id);
+  const iFollowThis = profile && !isMe && isFollowing(profile.id);
+
+  // Contadores honestos dentro das limitações do backend:
+  //  - "A seguir" (following) só é conhecido para o próprio utilizador (cache local).
+  //  - "Seguidores" só conhecemos o "1" que somos nós se seguirmos esta pessoa.
+  const counts = {
+    following: isMe ? followingCount : 0,
+    followers: !isMe && iFollowThis ? 1 : 0,
+  };
 
   const displayed = tab === 'images'
     ? tweets.filter((t) => t.image)
@@ -120,11 +127,7 @@ export function Profile() {
                 Editar perfil
               </Button>
             ) : (
-              <FollowButton
-                targetUserId={profile.id}
-                initialFollowing={following}
-                onChange={(f) => { setFollowing(f); setCounts((c) => ({ ...c, followers: c.followers + (f ? 1 : -1) })); }}
-              />
+              <FollowButton targetUserId={profile.id} />
             )}
           </div>
         </div>

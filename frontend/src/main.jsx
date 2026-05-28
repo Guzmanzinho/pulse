@@ -6,6 +6,7 @@ import { ThemeProvider } from './contexts/ThemeContext.jsx';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import { ToastProvider } from './contexts/ToastContext.jsx';
 import { TweetStoreProvider } from './contexts/TweetStoreContext.jsx';
+import { FollowProvider } from './contexts/FollowContext.jsx';
 import './styles/globals.css';
 import './styles/components.css';
 
@@ -14,11 +15,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
-          <TweetStoreProvider>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
-          </TweetStoreProvider>
+          <FollowProvider>
+            <TweetStoreProvider>
+              <BrowserRouter>
+                <App />
+              </BrowserRouter>
+            </TweetStoreProvider>
+          </FollowProvider>
         </AuthProvider>
       </ToastProvider>
     </ThemeProvider>
