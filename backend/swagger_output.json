@@ -11,6 +11,16 @@
     "http"
   ],
   "paths": {
+    "/health": {
+      "get": {
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "description": "",
@@ -147,16 +157,6 @@
           },
           "403": {
             "description": "Forbidden"
-          }
-        }
-      }
-    },
-    "/api/auth/teste": {
-      "get": {
-        "description": "",
-        "responses": {
-          "200": {
-            "description": "OK"
           }
         }
       }
@@ -904,16 +904,6 @@
           },
           "403": {
             "description": "Forbidden"
-          }
-        }
-      }
-    },
-    "/teste": {
-      "get": {
-        "description": "",
-        "responses": {
-          "200": {
-            "description": "OK"
           }
         }
       }

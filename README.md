@@ -102,13 +102,15 @@ Create local environment files from the committed examples. Do not commit real s
 | Variable | Required | Description |
 | --- | --- | --- |
 | `PORT` | No | HTTP port. Defaults to `3000`. |
+| `CLIENT_URL` | No | Allowed frontend origin for CORS. Defaults to `http://localhost:5173`; accepts a comma-separated list. |
 | `DB_NAME` | Yes | MySQL database name. |
 | `DB_USER` | Yes | MySQL user. |
 | `DB_PASSWORD` | Yes | MySQL password. |
 | `DB_DIALECT` | Yes | Sequelize dialect; use `mysql`. |
 | `DB_HOST` | Yes | MySQL server hostname. |
 | `DB_PORT` | Yes | MySQL server port, normally `3306`. |
-| `DB_SSL_CA_PATH` | Yes | Path to the CA certificate read by the current database configuration. |
+| `DB_SSL` | No | Set to `true` to enable MySQL SSL, or `false`/unset for a plain local connection. |
+| `DB_SSL_CA_PATH` | Only when `DB_SSL=true` | Path to the CA certificate used for SSL database connections. |
 | `JWT_SECRET` | Yes | Secret used to sign and verify JWTs. Use a long random value outside development. |
 
 ### Frontend — `frontend/.env`
@@ -136,7 +138,7 @@ cp frontend/.env.example frontend/.env
 ### Prerequisites
 
 - Node.js 18 or newer and npm.
-- A MySQL instance that accepts SSL connections using a CA certificate.
+- A MySQL instance. Hosted databases such as Aiven can use SSL with a CA certificate; local development can run without SSL.
 - MySQL Workbench or the MySQL CLI to create the database schema.
 
 ### 1. Create the database
@@ -147,7 +149,7 @@ Run [`bd/entregables_bd/02_script_criacao_bd.sql`](bd/entregables_bd/02_script_c
 mysql -u root -p < bd/entregables_bd/02_script_criacao_bd.sql
 ```
 
-Then update `backend/.env` with the connection values and the path to the CA certificate. The application does not currently run Sequelize migrations or seed data automatically.
+Then update `backend/.env` with the connection values. Set `DB_SSL=true` and provide `DB_SSL_CA_PATH` when your database requires a CA certificate, such as Aiven. The application does not currently run Sequelize migrations or seed data automatically.
 
 ### 2. Run the backend
 
@@ -191,6 +193,10 @@ With the backend running, Swagger UI is available at:
 
 - [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
 
+The unauthenticated healthcheck is available at:
+
+- [http://localhost:3000/health](http://localhost:3000/health)
+
 The UI reads the committed `backend/swagger_output.json`. To regenerate it after future API changes, run the following command from `backend/`:
 
 ```bash
@@ -212,14 +218,12 @@ Authorization: Bearer <token>
 
 ## Current limitations
 
-- The database connection always enables SSL and reads `DB_SSL_CA_PATH`; a plain local MySQL connection is not configurable without a code change.
 - Database setup is manual: there are no Sequelize migrations, seed scripts, or demo accounts.
 - There are no automated test, lint, or formatting scripts in either package.
 - `npm audit` currently reports known vulnerabilities in the existing dependency trees, including high/critical findings in the backend; dependencies should be reviewed before production use.
 - The backend has no public user-list or user-profile endpoint. The frontend derives some discovery/profile data from public posts, and follow counts/state are partially cached in `localStorage`.
 - Uploaded images are stored on the backend's local filesystem and no upload size limit is configured.
 - Logout clears client state but does not invalidate an issued JWT on the server.
-- CORS currently accepts any origin, which is convenient for development but too permissive for production.
 - Swagger is generated from the current route files, but request/response schemas and production server metadata are not fully specified.
 
 ## Future improvements
@@ -227,10 +231,9 @@ Authorization: Bearer <token>
 - Add automated unit, integration, and API tests, plus CI checks.
 - Review and update dependencies, validating compatibility as security findings are resolved.
 - Introduce versioned migrations and safe development seed data.
-- Make database SSL configurable for local and hosted environments.
 - Add public profile, user search, follower/following counts, and richer feed endpoints.
 - Move uploads to durable object storage and validate file size as well as type.
-- Add centralized request validation, rate limiting, stricter CORS, and token revocation or refresh-token support.
+- Add centralized request validation, rate limiting, and token revocation or refresh-token support.
 - Expand the OpenAPI specification with schemas, examples, security definitions, and environment-specific server URLs.
 - Add containerized local development and deployment documentation.
 

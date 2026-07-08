@@ -15,8 +15,4 @@ router.get('/perfil', authMiddleware, (req, res) => {
     })
 });
 
-router.get('/teste', (req, res) => {
-    res.json({ message: 'Rota de teste de autenticação!' });
-});
-
 module.exports = router;

@@ -11,6 +11,10 @@ const fs = require('fs');
 
 const sequelize = require('./config/database');
 const uploadsDir = path.join(__dirname, 'uploads');
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
 
 
 var indexRouter = require('./routes/index');
@@ -27,7 +31,13 @@ app.set('view engine', 'jade');
 
 app.use(logger('dev'));
 app.use(cors({
-  origin: true,
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -41,6 +51,10 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+app.get('/health', function(req, res) {
+  res.json({ status: 'ok' });
+});
 
 app.use('/', indexRouter);
 
