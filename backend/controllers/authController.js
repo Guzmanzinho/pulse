@@ -61,7 +61,7 @@ async function signUp(req, res) {
 
 // Login 
 async function login(req, res) {
-    const { nome_utilizador, password } = req.body;
+    const { nome_utilizador, password } = req.body || {};
     if (!nome_utilizador || !password) {
         return res.status(400).json({ mensagem: 'Nome de utilizador e password são obrigatórios' });
     }
