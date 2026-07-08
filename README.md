@@ -168,6 +168,8 @@ Available backend script:
 | `npm start` | Start the Express HTTP server. |
 | `npm test` | Run the backend Jest API tests. |
 
+Backend tests also run in GitHub Actions on pushes to `main` and pull requests targeting `main`.
+
 ### 3. Run the frontend
 
 In a second terminal:
@@ -229,7 +231,7 @@ Authorization: Bearer <token>
 
 ## Future improvements
 
-- Expand automated unit, integration, and API test coverage, plus CI checks.
+- Expand automated unit, integration, and API test coverage.
 - Review and update dependencies, validating compatibility as security findings are resolved.
 - Introduce versioned migrations and safe development seed data.
 - Add public profile, user search, follower/following counts, and richer feed endpoints.
