@@ -1,6 +1,8 @@
 const multer = require('multer');
 const path = require('path');
 
+const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
+
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, 'uploads/');
@@ -19,4 +21,24 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
-module.exports = multer({ storage, fileFilter }).single('imagem');
+const upload = multer({
+    storage,
+    fileFilter,
+    limits: {
+        fileSize: MAX_IMAGE_SIZE_BYTES
+    }
+}).single('imagem');
+
+module.exports = function uploadMiddleware(req, res, next) {
+    upload(req, res, function(error) {
+        if (!error) {
+            return next();
+        }
+
+        if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ mensagem: 'Imagem demasiado grande. O limite é 2 MB.' });
+        }
+
+        return res.status(400).json({ mensagem: error.message || 'Erro ao enviar imagem' });
+    });
+};
