@@ -166,6 +166,7 @@ Available backend script:
 | Command | Purpose |
 | --- | --- |
 | `npm start` | Start the Express HTTP server. |
+| `npm test` | Run the backend Jest API tests. |
 
 ### 3. Run the frontend
 
@@ -219,7 +220,7 @@ Authorization: Bearer <token>
 ## Current limitations
 
 - Database setup is manual: there are no Sequelize migrations, seed scripts, or demo accounts.
-- There are no automated test, lint, or formatting scripts in either package.
+- Automated tests are currently limited to basic backend API coverage; lint and formatting scripts are not configured.
 - `npm audit` currently reports known vulnerabilities in the existing dependency trees, including high/critical findings in the backend; dependencies should be reviewed before production use.
 - The backend has no public user-list or user-profile endpoint. The frontend derives some discovery/profile data from public posts, and follow counts/state are partially cached in `localStorage`.
 - Uploaded images are stored on the backend's local filesystem; uploads are limited to image MIME types and 2 MB.
@@ -228,7 +229,7 @@ Authorization: Bearer <token>
 
 ## Future improvements
 
-- Add automated unit, integration, and API tests, plus CI checks.
+- Expand automated unit, integration, and API test coverage, plus CI checks.
 - Review and update dependencies, validating compatibility as security findings are resolved.
 - Introduce versioned migrations and safe development seed data.
 - Add public profile, user search, follower/following counts, and richer feed endpoints.
