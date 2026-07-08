@@ -222,7 +222,7 @@ Authorization: Bearer <token>
 - There are no automated test, lint, or formatting scripts in either package.
 - `npm audit` currently reports known vulnerabilities in the existing dependency trees, including high/critical findings in the backend; dependencies should be reviewed before production use.
 - The backend has no public user-list or user-profile endpoint. The frontend derives some discovery/profile data from public posts, and follow counts/state are partially cached in `localStorage`.
-- Uploaded images are stored on the backend's local filesystem and no upload size limit is configured.
+- Uploaded images are stored on the backend's local filesystem; uploads are limited to image MIME types and 2 MB.
 - Logout clears client state but does not invalidate an issued JWT on the server.
 - Swagger is generated from the current route files, but request/response schemas and production server metadata are not fully specified.
 
@@ -232,8 +232,8 @@ Authorization: Bearer <token>
 - Review and update dependencies, validating compatibility as security findings are resolved.
 - Introduce versioned migrations and safe development seed data.
 - Add public profile, user search, follower/following counts, and richer feed endpoints.
-- Move uploads to durable object storage and validate file size as well as type.
-- Add centralized request validation, rate limiting, and token revocation or refresh-token support.
+- Move uploads to durable object storage and add deeper file validation beyond MIME type checks.
+- Add centralized request validation with a library such as Joi, Zod, or express-validator, plus rate limiting and token revocation or refresh-token support.
 - Expand the OpenAPI specification with schemas, examples, security definitions, and environment-specific server URLs.
 - Add containerized local development and deployment documentation.
 
